@@ -103,8 +103,22 @@ impl Scanner {
             }
             '/' => {
                 if self.match_char('/') {
-                    // ignore the comment
                     while self.peek() != '\n' && !self.is_at_end() {
+                        self.advance();
+                    }
+                } else if self.match_char('*') {
+                    loop {
+                        if self.is_at_end() {
+                            break;
+                        }
+                        if self.peek() == '*' && self.peek_next() == '/' {
+                            self.advance();
+                            self.advance();
+                            break;
+                        }
+                        if self.peek() == '\n' {
+                            self.line += 1;
+                        }
                         self.advance();
                     }
                 } else {
@@ -151,6 +165,13 @@ impl Scanner {
             return '\0';
         }
         return self.source_chars[self.current + 1];
+    }
+
+    fn peek_prev(&self) -> char {
+        if self.current == 0 {
+            return '\0';
+        }
+        return self.source_chars[self.current - 1];
     }
 
     fn is_digit(&self, c: char) -> bool {
