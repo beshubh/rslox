@@ -136,7 +136,7 @@ impl Scanner {
                 } else if self.is_alpha(c) {
                     self.scan_identifier();
                 } else {
-                    Lox::error(self.line, "Unexpected character.".to_string());
+                    Lox::error(self.line, "Unexpected character.");
                 }
             }
         }
@@ -167,13 +167,6 @@ impl Scanner {
         return self.source_chars[self.current + 1];
     }
 
-    fn peek_prev(&self) -> char {
-        if self.current == 0 {
-            return '\0';
-        }
-        return self.source_chars[self.current - 1];
-    }
-
     fn is_digit(&self, c: char) -> bool {
         c.is_ascii_digit()
     }
@@ -194,7 +187,7 @@ impl Scanner {
             self.advance();
         }
         if self.is_at_end() {
-            Lox::error(self.line, String::from("Unterminated string."));
+            Lox::error(self.line, "Unterminated string.");
             return;
         }
         // closing "

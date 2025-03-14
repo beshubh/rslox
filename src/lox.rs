@@ -1,4 +1,10 @@
-use crate::scanner::Scanner;
+use crate::{
+    ast_printer,
+    parser::Parser,
+    scanner::Scanner,
+    token::{Token, TokenType},
+};
+use core::str;
 use std::io::{self, BufRead, Write};
 
 static mut HAD_ERROR: bool = false;
@@ -35,9 +41,13 @@ impl Lox {
     fn run(&self, source: String) -> anyhow::Result<()> {
         let mut scanner = Scanner::new(source);
         let tokens = scanner.scan_tokens();
-        for token in tokens {
-            println!("{}", token);
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        if Self::had_error() {
+            return Err(anyhow::Error::msg("Error in parsing"));
         }
+        let expr = expr.unwrap();
+        println!("{}", ast_printer::print_ast(expr));
         Ok(())
     }
 
@@ -49,12 +59,20 @@ impl Lox {
         unsafe { HAD_ERROR = had_error }
     }
 
-    pub fn error(line: usize, message: String) {
-        Self::report(line, "".to_string(), message);
+    pub fn error(line: usize, message: &str) {
+        Self::report(line, "", message);
     }
 
-    fn report(line: usize, where_: String, message: String) {
+    fn report(line: usize, where_: &str, message: &str) {
         eprintln!("[line: {}] Error {}:{}", line, where_, message);
         Self::set_had_error(true);
+    }
+
+    pub fn error_token(token: Token, message: &str) {
+        if token.token_type == TokenType::EOF {
+            Self::report(token.line, "at end", message);
+        } else {
+            Self::report(token.line, &format!(" at '{}'", token.lexeme), message);
+        }
     }
 }
