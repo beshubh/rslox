@@ -1,12 +1,13 @@
 /*
 /// Grammar for Lox (minimal)
-/// expression     -> equality;
-/// equality       -> comparison (( "!=" | "==" )  comparison)* ; // allowing expression like a == b, a != b, a == b != c
-/// comparison     -> term ((">" | ">=" | "<" | "<=") term)* ;
-/// term           ->  factor (("+" | "-") factor)* ;// allow a + b, a - b, a + b / c
-/// factor         ->  unary ( ("/" | "*") unary)* ;
-/// unary          -> ("!", "-") unary | primary ;
-/// primary        -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")";
+/// comma_expression    -> "(" expression ("," expression)* ")";
+/// expression          -> equality;
+/// equality            -> comparison (( "!=" | "==" )  comparison)* ; // allowing expression like a == b, a != b, a == b != c
+/// comparison          -> term ((">" | ">=" | "<" | "<=") term)* ;
+/// term                ->  factor (("+" | "-") factor)* ;// allow a + b, a - b, a + b / c
+/// factor              ->  unary ( ("/" | "*") unary)* ;
+/// unary               -> ("!", "-") unary | primary ;
+/// primary             -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")";
 */
 use crate::ast::Expr;
 use crate::lox::Lox;
@@ -35,11 +36,22 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Option<Expr> {
-        if let Ok(expr) = self.expression() {
+        if let Ok(expr) = self.comma_expression() {
             return Some(expr);
         } else {
             None
         }
+    }
+
+    fn comma_expression(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.expression()?;
+        // 1 + 2, 3 - 4, a + b, c + d
+        while self.match_type(&[TokenType::COMMA]) {
+            let operator = self.previous().clone();
+            let right = self.expression()?;
+            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+        }
+        return Ok(expr);
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
