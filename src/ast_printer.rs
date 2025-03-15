@@ -10,6 +10,9 @@ pub fn print_ast(expr: Expr) -> String {
         },
         Expr::Unary(op, right) => return parenthesize(&op.lexeme, &vec![right]),
         Expr::Grouping(expr) => return parenthesize("group", &vec![expr]),
+        Expr::Ternary(cond, then_expr, else_expr) => {
+            return parenthesize("?:", &vec![cond, then_expr, else_expr]);
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 /*
-/// Grammar for Lox (minimal)
-/// comma_expression    -> "(" expression ("," expression)* ")";
+/// Grammar for Lox (minimal) (precdence lowest to highest)
+/// comma_expression    -> expression ("," expression)*;
+/// ternary             -> expression | expression "?" ternary ":" ternary;// example expr ? true expr : false expr
 /// expression          -> equality;
 /// equality            -> comparison (( "!=" | "==" )  comparison)* ; // allowing expression like a == b, a != b, a == b != c
 /// comparison          -> term ((">" | ">=" | "<" | "<=") term)* ;
@@ -54,8 +55,23 @@ impl Parser {
         return Ok(expr);
     }
 
+    fn ternary(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.equality()?;
+        if self.match_type(&[TokenType::QUESTIONMARK]) {
+            let then_expr = self.expression()?;
+            self.consume(
+                &TokenType::COLON,
+                "Expect ':' after the branch of ternay expression.",
+            )?;
+            let else_expr = self.ternary()?;
+            expr = Expr::Ternary(Box::new(expr), Box::new(then_expr), Box::new(else_expr));
+            return Ok(expr);
+        }
+        Ok(expr)
+    }
+
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        self.equality()
+        self.ternary()
     }
 
     fn equality(&mut self) -> Result<Expr, ParseError> {

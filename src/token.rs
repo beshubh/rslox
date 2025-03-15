@@ -12,8 +12,10 @@ pub enum TokenType {
     MINUS,
     PLUS,
     SEMICOLON,
+    COLON,
     SLASH,
     STAR,
+    QUESTIONMARK,
 
     // One or two character tokens.
     BANG,

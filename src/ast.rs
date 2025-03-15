@@ -6,6 +6,7 @@ pub enum Expr {
     Literal(Literal),
     Unary(Token, Box<Expr>),
     Grouping(Box<Expr>),
+    Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 impl Expr
@@ -31,6 +32,9 @@ impl ExprVisitor for Expr {
             },
             Expr::Unary(op, right) => return parenthesize(&op.lexeme, &vec![right]),
             Expr::Grouping(expr) => return parenthesize("group", &vec![expr]),
+            Expr::Ternary(cond, then_expr, else_expr) => {
+                return parenthesize("?:", &vec![cond, then_expr, else_expr]);
+            }
         }
     }
 }
