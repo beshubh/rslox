@@ -47,7 +47,9 @@ impl Lox {
             return Err(anyhow::Error::msg("Error in parsing"));
         }
         let expr = expr.unwrap();
-        println!("{}", ast_printer::print_ast(expr));
+        let printer = ast_printer::AstPrinter {};
+
+        println!("{}", printer.print(&expr));
         Ok(())
     }
 

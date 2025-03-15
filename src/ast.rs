@@ -9,44 +9,24 @@ pub enum Expr {
     Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
-impl Expr
-where
-    Self: ExprVisitor,
-{
-    pub fn accept(&self) -> String {
-        return self.visit();
-    }
-}
-
-pub trait ExprVisitor {
-    fn visit(&self) -> String;
-}
-
-impl ExprVisitor for Expr {
-    fn visit(&self) -> String {
+impl Expr {
+    pub fn accept<R>(&self, vistor: &impl ExprVisitor<R>) -> R {
         match self {
-            Expr::Binary(left, op, right) => return parenthesize(&op.lexeme, &vec![left, right]),
-            Expr::Literal(literal) => match literal {
-                Literal::Nil => String::from("nil"),
-                _ => literal.to_string(),
-            },
-            Expr::Unary(op, right) => return parenthesize(&op.lexeme, &vec![right]),
-            Expr::Grouping(expr) => return parenthesize("group", &vec![expr]),
+            Expr::Binary(left, op, right) => return vistor.visit_binary(left, op, right),
+            Expr::Literal(literal) => return vistor.visit_literal(literal),
+            Expr::Unary(token, expr) => return vistor.visit_unary(token, expr),
+            Expr::Grouping(expr) => return vistor.visit_grouping(expr),
             Expr::Ternary(cond, then_expr, else_expr) => {
-                return parenthesize("?:", &vec![cond, then_expr, else_expr]);
+                return vistor.visit_ternary(cond, then_expr, else_expr)
             }
         }
     }
 }
 
-fn parenthesize(name: &str, exprs: &Vec<&Box<Expr>>) -> String {
-    let mut res = String::new();
-    res.push('(');
-    res.push_str(name);
-    for expr in exprs {
-        res.push_str(&expr.visit());
-        res.push(' ');
-    }
-    res.push(')');
-    res
+pub trait ExprVisitor<R> {
+    fn visit_binary(&self, left: &Box<Expr>, op: &Token, right: &Box<Expr>) -> R;
+    fn visit_literal(&self, literal: &Literal) -> R;
+    fn visit_unary(&self, token: &Token, expr: &Box<Expr>) -> R;
+    fn visit_grouping(&self, expr: &Box<Expr>) -> R;
+    fn visit_ternary(&self, cond: &Box<Expr>, then_expr: &Box<Expr>, else_expr: &Box<Expr>) -> R;
 }
