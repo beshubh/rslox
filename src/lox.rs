@@ -1,5 +1,6 @@
 use crate::{
     ast_printer,
+    interpreter::{self, RunTimeError},
     parser::Parser,
     scanner::Scanner,
     token::{Token, TokenType},
@@ -8,8 +9,11 @@ use core::str;
 use std::io::{self, BufRead, Write};
 
 static mut HAD_ERROR: bool = false;
+static mut HAD_RUNTIME_ERROR: bool = false;
 
-pub struct Lox {}
+pub struct Lox {
+    pub interpreter: interpreter::Interpreter,
+}
 
 impl Lox {
     pub fn run_file(&self, path: &str) -> anyhow::Result<()> {
@@ -46,15 +50,22 @@ impl Lox {
         if Self::had_error() {
             return Err(anyhow::Error::msg("Error in parsing"));
         }
+        if Self::had_runtime_error() {
+            return Err(anyhow::Error::msg("Runtime error"));
+        }
         let expr = expr.unwrap();
-        let printer = ast_printer::AstPrinter {};
-
-        println!("{}", printer.print(&expr));
+        // let printer = ast_printer::AstPrinter {};
+        // println!("{}", printer.print(&expr));
+        self.interpreter.interpret(&Box::new(expr));
         Ok(())
     }
 
     fn had_error() -> bool {
         unsafe { HAD_ERROR }
+    }
+
+    fn had_runtime_error() -> bool {
+        unsafe { HAD_RUNTIME_ERROR }
     }
 
     fn set_had_error(had_error: bool) {
@@ -75,6 +86,12 @@ impl Lox {
             Self::report(token.line, "at end", message);
         } else {
             Self::report(token.line, &format!(" at '{}'", token.lexeme), message);
+        }
+    }
+    pub fn runtime_error(err: RunTimeError) {
+        eprintln!("{} \n [line {} ]", err, err.token.line);
+        unsafe {
+            HAD_RUNTIME_ERROR = true;
         }
     }
 }
