@@ -12,7 +12,9 @@ struct Cli {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let mut lox = Lox {};
+    let mut lox = Lox {
+        interpreter: rslox::interpreter::Interpreter {},
+    };
     match cli.script {
         Some(script) => lox.run_file(&script),
         None => lox.run_prompt(),

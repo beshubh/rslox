@@ -114,7 +114,12 @@ impl Interpreter {
 
 impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
     fn visit_literal(&self, literal: &Literal) -> Result<Box<dyn Any>> {
-        Ok(Box::new(literal.to_string()) as Box<dyn Any>)
+        match literal {
+            Literal::Number(num) => Ok(Box::new(*num) as Box<dyn Any>),
+            Literal::String(s) => Ok(Box::new(s.clone()) as Box<dyn Any>),
+            Literal::Boolean(b) => Ok(Box::new(*b) as Box<dyn Any>),
+            Literal::Nil => Ok(Box::new(()) as Box<dyn Any>),
+        }
     }
 
     fn visit_grouping(&self, expr: &Box<Expr>) -> Result<Box<dyn Any>> {
@@ -126,7 +131,7 @@ impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
         match op.token_type {
             TokenType::BANG => return Ok(Box::new(!self.is_truthy(right))),
             TokenType::MINUS => {
-                self.check_number_operand(op, &right);
+                self.check_number_operand(op, &right)?;
                 return Ok(Box::new(
                     -self.evaluate(expr)?.downcast_ref::<f64>().unwrap(),
                 ));
@@ -174,9 +179,7 @@ impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
                 ));
             }
             TokenType::EQUALEQUAL => {
-                return Ok(Box::new(
-                    left.downcast_ref::<f64>().unwrap() == right.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Box::new(self.is_equal(left, right)));
             }
             TokenType::MINUS => {
                 self.check_number_operand_s(op, &left, &right)?;
@@ -197,12 +200,34 @@ impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
                         right.downcast_ref::<String>().unwrap()
                     )));
                 }
+
+                if left.is::<String>() && right.is::<f64>() {
+                    return Ok(Box::new(format!(
+                        "{}{}",
+                        left.downcast_ref::<String>().unwrap(),
+                        right.downcast_ref::<f64>().unwrap()
+                    )));
+                }
+                if left.is::<f64>() && right.is::<String>() {
+                    return Ok(Box::new(format!(
+                        "{}{}",
+                        left.downcast_ref::<f64>().unwrap(),
+                        right.downcast_ref::<String>().unwrap()
+                    )));
+                }
                 return Err(RunTimeError::new(
                     op.clone(),
-                    "Operands must be two numbers or two strings.",
+                    "Operands not compatible for addition/concatenation",
                 ));
             }
             TokenType::SLASH => {
+                self.check_number_operand_s(op, &left, &right)?;
+                if right.downcast_ref::<f64>().unwrap() == &0.0 {
+                    return Err(RunTimeError::new(
+                        op.clone(),
+                        "Division by zero is not allowed.",
+                    ));
+                }
                 return Ok(Box::new(
                     left.downcast_ref::<f64>().unwrap() / right.downcast_ref::<f64>().unwrap(),
                 ));
@@ -214,5 +239,18 @@ impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
                 panic!("Unknown binary operator: {:?}", op.token_type);
             }
         }
+    }
+
+    fn visit_ternary(
+        &self,
+        cond: &Box<Expr>,
+        then_expr: &Box<Expr>,
+        else_expr: &Box<Expr>,
+    ) -> Result<Box<dyn Any>> {
+        let cond = self.evaluate(cond)?;
+        if self.is_truthy(cond) {
+            return self.evaluate(then_expr);
+        }
+        return self.evaluate(else_expr);
     }
 }
