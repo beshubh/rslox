@@ -1,5 +1,9 @@
 /*
-/// Grammar for Lox (minimal) (precdence lowest to highest)
+/// Grammar for Lox (precdence lowest to highest)
+/// program             -> statement* EOF;
+/// statement           -> expr_statement | print_statement ;
+/// expr_statement      -> expression ";";
+/// print_statement     -> "print" expression ";";
 /// comma_expression    -> expression ("," expression)*;
 /// ternary             -> expression | expression "?" ternary ":" ternary;// example expr ? true expr : false expr
 /// expression          -> equality;
@@ -12,8 +16,9 @@
 */
 use crate::ast::Expr;
 use crate::lox::Lox;
+use crate::statement::Stmt;
 use crate::token::{self, Token, TokenType};
-use std::fmt;
+use std::{fmt, vec};
 
 pub struct Parser {
     pub tokens: Vec<Token>,
@@ -36,12 +41,31 @@ impl Parser {
         Parser { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Option<Expr> {
-        if let Ok(expr) = self.comma_expression() {
-            return Some(expr);
-        } else {
-            None
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut statements: Vec<Stmt> = vec![];
+        while !self.is_at_end() {
+            statements.push(self.statement()?);
         }
+        return Ok(statements);
+    }
+
+    fn statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.match_type(&[TokenType::PRINT]) {
+            return self.print_statement();
+        }
+        return self.expression_statement();
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt, ParseError> {
+        let value = self.expression()?;
+        self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
+        Ok(Stmt::Print(Box::new(value)))
+    }
+
+    fn expression_statement(&mut self) -> Result<Stmt, ParseError> {
+        let value = self.expression()?;
+        self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.")?;
+        Ok(Stmt::Expression(Box::new(value)))
     }
 
     fn comma_expression(&mut self) -> Result<Expr, ParseError> {

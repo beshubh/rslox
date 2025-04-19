@@ -1,5 +1,6 @@
 use crate::ast::{Expr, ExprVisitor};
 use crate::lox::Lox;
+use crate::statement::{Stmt, StmtVisitor};
 use crate::token::{Literal, Token, TokenType};
 use std::any::Any;
 use std::fmt;
@@ -32,13 +33,22 @@ type Result<T> = std::result::Result<T, RunTimeError>;
 pub struct Interpreter;
 
 impl Interpreter {
-    pub fn interpret(&self, expr: &Box<Expr>) {
-        let res = self.evaluate(expr);
-        if let Err(err) = res {
-            Lox::runtime_error(err);
-            return;
+    pub fn interpret(&self, statements: Vec<Stmt>) {
+        for stmt in statements {
+            let res = self.execute(stmt);
+            if let Err(err) = res {
+                Lox::runtime_error(err);
+                return;
+            }
         }
-        println!("{:?}", self.stringify(res.unwrap()));
+    }
+
+    fn execute(&self, stmt: Stmt) -> Result<()> {
+        return stmt.accept(self);
+    }
+
+    fn evaluate(&self, expr: &Box<Expr>) -> Result<Box<dyn Any>> {
+        return expr.accept(self);
     }
 
     pub fn stringify(&self, obj: Box<dyn Any>) -> String {
@@ -56,10 +66,6 @@ impl Interpreter {
             return obj.downcast_ref::<bool>().unwrap().to_string();
         }
         return obj.downcast_ref::<String>().unwrap().to_string();
-    }
-
-    fn evaluate(&self, expr: &Box<Expr>) -> Result<Box<dyn Any>> {
-        return expr.accept(self);
     }
 
     fn is_truthy(&self, obj: Box<dyn Any>) -> bool {
@@ -252,5 +258,18 @@ impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
             return self.evaluate(then_expr);
         }
         return self.evaluate(else_expr);
+    }
+}
+
+impl StmtVisitor<Result<()>> for Interpreter {
+    fn visit_expression(&self, expr: &Box<Expr>) -> Result<()> {
+        self.evaluate(expr)?;
+        Ok(())
+    }
+
+    fn visit_print(&self, expr: &Box<Expr>) -> Result<()> {
+        let res = self.evaluate(expr)?;
+        println!("{}", self.stringify(res));
+        Ok(())
     }
 }

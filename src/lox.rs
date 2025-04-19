@@ -46,17 +46,17 @@ impl Lox {
         let mut scanner = Scanner::new(source);
         let tokens = scanner.scan_tokens();
         let mut parser = Parser::new(tokens);
-        let expr = parser.parse();
+        let statements = parser.parse();
         if Self::had_error() {
             return Err(anyhow::Error::msg("Error in parsing"));
         }
         if Self::had_runtime_error() {
             return Err(anyhow::Error::msg("Runtime error"));
         }
-        let expr = expr.unwrap();
+        let statements = statements.unwrap();
         // let printer = ast_printer::AstPrinter {};
         // println!("{}", printer.print(&expr));
-        self.interpreter.interpret(&Box::new(expr));
+        self.interpreter.interpret(statements);
         Ok(())
     }
 
