@@ -1,9 +1,12 @@
 use crate::ast::{Expr, ExprVisitor};
+use crate::environment::Environment;
 use crate::lox::Lox;
 use crate::statement::{Stmt, StmtVisitor};
 use crate::token::{Literal, Token, TokenType};
 use std::any::Any;
+use std::cell::RefCell;
 use std::fmt;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct RunTimeError {
@@ -30,10 +33,16 @@ impl std::error::Error for RunTimeError {}
 
 type Result<T> = std::result::Result<T, RunTimeError>;
 
-pub struct Interpreter;
+pub struct Interpreter {
+    environment: Environment,
+}
 
 impl Interpreter {
-    pub fn interpret(&self, statements: Vec<Stmt>) {
+    pub fn new(environment: Environment) -> Self {
+        Interpreter { environment }
+    }
+
+    pub fn interpret(&mut self, statements: Vec<Stmt>) {
         for stmt in statements {
             let res = self.execute(stmt);
             if let Err(err) = res {
@@ -43,15 +52,16 @@ impl Interpreter {
         }
     }
 
-    fn execute(&self, stmt: Stmt) -> Result<()> {
+    fn execute(&mut self, stmt: Stmt) -> Result<()> {
         return stmt.accept(self);
     }
 
-    fn evaluate(&self, expr: &Box<Expr>) -> Result<Box<dyn Any>> {
+    fn evaluate(&self, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
         return expr.accept(self);
     }
 
-    pub fn stringify(&self, obj: Box<dyn Any>) -> String {
+    pub fn stringify(&self, obj: Rc<RefCell<dyn Any>>) -> String {
+        let obj = obj.borrow();
         if obj.is::<Option<()>>() {
             return "nil".to_string();
         }
@@ -68,8 +78,9 @@ impl Interpreter {
         return obj.downcast_ref::<String>().unwrap().to_string();
     }
 
-    fn is_truthy(&self, obj: Box<dyn Any>) -> bool {
+    fn is_truthy(&self, obj: Rc<RefCell<dyn Any>>) -> bool {
         // false and nil are false everything else is true REF: ruby
+        let obj = obj.borrow();
         if obj.is::<Option<()>>() {
             return false;
         }
@@ -79,7 +90,10 @@ impl Interpreter {
         return true;
     }
 
-    fn is_equal(&self, a: Box<dyn Any>, b: Box<dyn Any>) -> bool {
+    fn is_equal(&self, a: Rc<RefCell<dyn Any>>, b: Rc<RefCell<dyn Any>>) -> bool {
+        let a = a.borrow();
+        let b = b.borrow();
+
         if a.is::<Option<()>>() && b.is::<Option<()>>() {
             return true;
         }
@@ -98,7 +112,8 @@ impl Interpreter {
         return false;
     }
 
-    fn check_number_operand(&self, op: &Token, operand: &Box<dyn Any>) -> Result<()> {
+    fn check_number_operand(&self, op: &Token, operand: &Rc<RefCell<dyn Any>>) -> Result<()> {
+        let operand = operand.borrow();
         if !operand.is::<f64>() {
             return Err(RunTimeError::new(op.clone(), "Operand must be a number."));
         }
@@ -108,9 +123,11 @@ impl Interpreter {
     fn check_number_operand_s(
         &self,
         op: &Token,
-        left: &Box<dyn Any>,
-        right: &Box<dyn Any>,
+        left: &Rc<RefCell<dyn Any>>,
+        right: &Rc<RefCell<dyn Any>>,
     ) -> Result<()> {
+        let left = left.borrow();
+        let right = right.borrow();
         if !left.is::<f64>() || !right.is::<f64>() {
             return Err(RunTimeError::new(op.clone(), "Operands must be numbers"));
         }
@@ -118,29 +135,29 @@ impl Interpreter {
     }
 }
 
-impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
-    fn visit_literal(&self, literal: &Literal) -> Result<Box<dyn Any>> {
+impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
+    fn visit_literal(&self, literal: &Literal) -> Result<Rc<RefCell<dyn Any>>> {
         match literal {
-            Literal::Number(num) => Ok(Box::new(*num) as Box<dyn Any>),
-            Literal::String(s) => Ok(Box::new(s.clone()) as Box<dyn Any>),
-            Literal::Boolean(b) => Ok(Box::new(*b) as Box<dyn Any>),
-            Literal::Nil => Ok(Box::new(()) as Box<dyn Any>),
+            Literal::Number(num) => Ok(Rc::new(RefCell::new(*num)) as Rc<RefCell<dyn Any>>),
+            Literal::String(s) => Ok(Rc::new(RefCell::new(s.clone())) as Rc<RefCell<dyn Any>>),
+            Literal::Boolean(b) => Ok(Rc::new(RefCell::new(*b)) as Rc<RefCell<dyn Any>>),
+            Literal::Nil => Ok(Rc::new(RefCell::new(())) as Rc<RefCell<dyn Any>>),
         }
     }
 
-    fn visit_grouping(&self, expr: &Box<Expr>) -> Result<Box<dyn Any>> {
+    fn visit_grouping(&self, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
         Ok(self.evaluate(expr)?)
     }
 
-    fn visit_unary(&self, op: &Token, expr: &Box<Expr>) -> Result<Box<dyn Any>> {
+    fn visit_unary(&self, op: &Token, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
         let right = self.evaluate(expr)?;
         match op.token_type {
-            TokenType::BANG => return Ok(Box::new(!self.is_truthy(right))),
+            TokenType::BANG => return Ok(Rc::new(RefCell::new(!self.is_truthy(right)))),
             TokenType::MINUS => {
                 self.check_number_operand(op, &right)?;
-                return Ok(Box::new(
-                    -self.evaluate(expr)?.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Rc::new(RefCell::new(
+                    -self.evaluate(expr)?.borrow().downcast_ref::<f64>().unwrap(),
+                )));
             }
             _ => Err(RunTimeError::new(op.clone(), "Unknown unary operator")),
         }
@@ -151,75 +168,82 @@ impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
         left: &Box<Expr>,
         op: &Token,
         right: &Box<Expr>,
-    ) -> Result<Box<dyn Any>> {
+    ) -> Result<Rc<RefCell<dyn Any>>> {
         let left = self.evaluate(left)?;
         let right = self.evaluate(right)?;
         match op.token_type {
             TokenType::GREATER => {
                 self.check_number_operand_s(op, &left, &right)?;
-                return Ok(Box::new(
-                    left.downcast_ref::<f64>().unwrap() > right.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Rc::new(RefCell::new(
+                    left.borrow().downcast_ref::<f64>().unwrap()
+                        > right.borrow().downcast_ref::<f64>().unwrap(),
+                )));
             }
             TokenType::GREATEREQUAL => {
                 self.check_number_operand_s(op, &left, &right)?;
-                return Ok(Box::new(
-                    left.downcast_ref::<f64>().unwrap() >= right.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Rc::new(RefCell::new(
+                    left.borrow().downcast_ref::<f64>().unwrap()
+                        >= right.borrow().downcast_ref::<f64>().unwrap(),
+                )));
             }
             TokenType::LESS => {
                 self.check_number_operand_s(op, &left, &right)?;
-                return Ok(Box::new(
-                    left.downcast_ref::<f64>().unwrap() < right.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Rc::new(RefCell::new(
+                    left.borrow().downcast_ref::<f64>().unwrap()
+                        < right.borrow().downcast_ref::<f64>().unwrap(),
+                )));
             }
             TokenType::LESSEQUAL => {
                 self.check_number_operand_s(op, &left, &right)?;
-                return Ok(Box::new(
-                    left.downcast_ref::<f64>().unwrap() <= right.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Rc::new(RefCell::new(
+                    left.borrow().downcast_ref::<f64>().unwrap()
+                        <= right.borrow().downcast_ref::<f64>().unwrap(),
+                )));
             }
             TokenType::BANGEQUAL => {
-                return Ok(Box::new(
-                    left.downcast_ref::<f64>().unwrap() != right.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Rc::new(RefCell::new(
+                    left.borrow().downcast_ref::<f64>().unwrap()
+                        != right.borrow().downcast_ref::<f64>().unwrap(),
+                )));
             }
             TokenType::EQUALEQUAL => {
-                return Ok(Box::new(self.is_equal(left, right)));
+                return Ok(Rc::new(RefCell::new(self.is_equal(left, right))));
             }
             TokenType::MINUS => {
                 self.check_number_operand_s(op, &left, &right)?;
-                return Ok(Box::new(
-                    left.downcast_ref::<f64>().unwrap() - right.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Rc::new(RefCell::new(
+                    left.borrow().downcast_ref::<f64>().unwrap()
+                        - right.borrow().downcast_ref::<f64>().unwrap(),
+                )));
             }
             TokenType::PLUS => {
-                if left.is::<f64>() && right.is::<f64>() {
-                    return Ok(Box::new(
-                        left.downcast_ref::<f64>().unwrap() + right.downcast_ref::<f64>().unwrap(),
-                    ));
-                }
-                if left.is::<String>() && right.is::<String>() {
-                    return Ok(Box::new(format!(
-                        "{}{}",
-                        left.downcast_ref::<String>().unwrap(),
-                        right.downcast_ref::<String>().unwrap()
+                if left.borrow().is::<f64>() && right.borrow().is::<f64>() {
+                    return Ok(Rc::new(RefCell::new(
+                        left.borrow().downcast_ref::<f64>().unwrap()
+                            + right.borrow().downcast_ref::<f64>().unwrap(),
                     )));
+                }
+                if left.borrow().is::<String>() && right.borrow().is::<String>() {
+                    return Ok(Rc::new(RefCell::new(format!(
+                        "{}{}",
+                        left.borrow().downcast_ref::<String>().unwrap(),
+                        right.borrow().downcast_ref::<String>().unwrap()
+                    ))));
                 }
 
-                if left.is::<String>() && right.is::<f64>() {
-                    return Ok(Box::new(format!(
+                if left.borrow().is::<String>() && right.borrow().is::<f64>() {
+                    return Ok(Rc::new(RefCell::new(format!(
                         "{}{}",
-                        left.downcast_ref::<String>().unwrap(),
-                        right.downcast_ref::<f64>().unwrap()
-                    )));
+                        left.borrow().downcast_ref::<String>().unwrap(),
+                        right.borrow().downcast_ref::<f64>().unwrap()
+                    ))));
                 }
-                if left.is::<f64>() && right.is::<String>() {
-                    return Ok(Box::new(format!(
+                if left.borrow().is::<f64>() && right.borrow().is::<String>() {
+                    return Ok(Rc::new(RefCell::new(format!(
                         "{}{}",
-                        left.downcast_ref::<f64>().unwrap(),
-                        right.downcast_ref::<String>().unwrap()
-                    )));
+                        left.borrow().downcast_ref::<f64>().unwrap(),
+                        right.borrow().downcast_ref::<String>().unwrap()
+                    ))));
                 }
                 return Err(RunTimeError::new(
                     op.clone(),
@@ -228,19 +252,21 @@ impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
             }
             TokenType::SLASH => {
                 self.check_number_operand_s(op, &left, &right)?;
-                if right.downcast_ref::<f64>().unwrap() == &0.0 {
+                if right.borrow().downcast_ref::<f64>().unwrap() == &0.0 {
                     return Err(RunTimeError::new(
                         op.clone(),
                         "Division by zero is not allowed.",
                     ));
                 }
-                return Ok(Box::new(
-                    left.downcast_ref::<f64>().unwrap() / right.downcast_ref::<f64>().unwrap(),
-                ));
+                return Ok(Rc::new(RefCell::new(
+                    left.borrow().downcast_ref::<f64>().unwrap()
+                        / right.borrow().downcast_ref::<f64>().unwrap(),
+                )));
             }
-            TokenType::STAR => Ok(Box::new(
-                left.downcast_ref::<f64>().unwrap() * right.downcast_ref::<f64>().unwrap(),
-            )),
+            TokenType::STAR => Ok(Rc::new(RefCell::new(
+                left.borrow().downcast_ref::<f64>().unwrap()
+                    * right.borrow().downcast_ref::<f64>().unwrap(),
+            ))),
             _ => {
                 panic!("Unknown binary operator: {:?}", op.token_type);
             }
@@ -252,12 +278,16 @@ impl ExprVisitor<Result<Box<dyn Any>>> for Interpreter {
         cond: &Box<Expr>,
         then_expr: &Box<Expr>,
         else_expr: &Box<Expr>,
-    ) -> Result<Box<dyn Any>> {
+    ) -> Result<Rc<RefCell<dyn Any>>> {
         let cond = self.evaluate(cond)?;
         if self.is_truthy(cond) {
             return self.evaluate(then_expr);
         }
         return self.evaluate(else_expr);
+    }
+
+    fn visit_var(&self, name: &Token) -> Result<Rc<RefCell<dyn Any>>> {
+        return self.environment.get(name.clone());
     }
 }
 
@@ -270,6 +300,16 @@ impl StmtVisitor<Result<()>> for Interpreter {
     fn visit_print(&self, expr: &Box<Expr>) -> Result<()> {
         let res = self.evaluate(expr)?;
         println!("{}", self.stringify(res));
+        Ok(())
+    }
+
+    fn visit_var(&mut self, name: &Token, initializer: &Option<Box<Expr>>) -> Result<()> {
+        if initializer.is_none() {
+            return Ok(());
+        }
+        let initializer = initializer.as_ref().unwrap();
+        let value = self.evaluate(&initializer)?;
+        self.environment.define(name.lexeme.clone(), value);
         Ok(())
     }
 }

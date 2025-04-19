@@ -6,3 +6,4 @@ pub mod parser;
 pub mod scanner;
 pub mod statement;
 pub mod token;
+pub mod environment;

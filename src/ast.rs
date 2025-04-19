@@ -5,6 +5,7 @@ pub enum Expr {
     Binary(Box<Expr>, Token, Box<Expr>),
     Literal(Literal),
     Unary(Token, Box<Expr>),
+    Var(Token),
     Grouping(Box<Expr>),
     Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
 }
@@ -19,6 +20,7 @@ impl Expr {
             Expr::Ternary(cond, then_expr, else_expr) => {
                 return vistor.visit_ternary(cond, then_expr, else_expr)
             }
+            Expr::Var(name) => return vistor.visit_var(name),
         }
     }
 }
@@ -29,4 +31,5 @@ pub trait ExprVisitor<R> {
     fn visit_unary(&self, token: &Token, expr: &Box<Expr>) -> R;
     fn visit_grouping(&self, expr: &Box<Expr>) -> R;
     fn visit_ternary(&self, cond: &Box<Expr>, then_expr: &Box<Expr>, else_expr: &Box<Expr>) -> R;
+    fn visit_var(&self, name: &Token) -> R;
 }

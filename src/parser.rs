@@ -1,6 +1,8 @@
 /*
 /// Grammar for Lox (precdence lowest to highest)
-/// program             -> statement* EOF;
+/// program             -> decleration* EOF;
+/// decleration         -> var_decl | statement ;
+/// var_decl            -> "var" IDENTIFIER ( "=" expression )? ";" ;
 /// statement           -> expr_statement | print_statement ;
 /// expr_statement      -> expression ";";
 /// print_statement     -> "print" expression ";";
@@ -12,13 +14,13 @@
 /// term                ->  factor (("+" | "-") factor)* ;// allow a + b, a - b, a + b / c
 /// factor              ->  unary ( ("/" | "*") unary)* ;
 /// unary               -> ("!", "-") unary | primary ;
-/// primary             -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")";
+/// primary             -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
 */
 use crate::ast::Expr;
 use crate::lox::Lox;
 use crate::statement::Stmt;
 use crate::token::{self, Token, TokenType};
-use std::{fmt, vec};
+use std::fmt;
 
 pub struct Parser {
     pub tokens: Vec<Token>,
@@ -41,12 +43,74 @@ impl Parser {
         Parser { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseError> {
-        let mut statements: Vec<Stmt> = vec![];
+    fn synchronize(&mut self) {
+        self.advance();
+
         while !self.is_at_end() {
-            statements.push(self.statement()?);
+            if self.previous().token_type == TokenType::SEMICOLON {
+                return;
+            }
+            match self.peek().token_type {
+                TokenType::CLASS
+                | TokenType::FUN
+                | TokenType::VAR
+                | TokenType::FOR
+                | TokenType::IF
+                | TokenType::WHILE
+                | TokenType::PRINT
+                | TokenType::RETURN => {
+                    return;
+                }
+                _ => {}
+            }
         }
-        return Ok(statements);
+        self.advance();
+    }
+
+    pub fn parse(&mut self) -> Vec<Stmt> {
+        let mut statements = vec![];
+        while !self.is_at_end() {
+            let stmt = self.decleration();
+            if let Some(stmt) = stmt {
+                statements.push(stmt);
+            }
+        }
+        return statements;
+    }
+
+    fn decleration(&mut self) -> Option<Stmt> {
+        if self.match_type(&[TokenType::VAR]) {
+            let res = self.var_decl();
+            if let Err(_) = res {
+                self.synchronize();
+                return None;
+            }
+            return Some(res.unwrap());
+        }
+
+        let res = self.statement();
+        if let Err(_) = res {
+            self.synchronize();
+            return None;
+        }
+        return Some(res.unwrap());
+    }
+
+    fn var_decl(&mut self) -> Result<Stmt, ParseError> {
+        let name = self
+            .consume(&TokenType::IDENTIFIER, "Expect variable name.")
+            .cloned()?;
+        let mut initializer: Option<Box<Expr>> = None;
+
+        if self.match_type(&[TokenType::EQUAL]) {
+            initializer = Some(Box::new(self.expression()?));
+        }
+
+        self.consume(
+            &TokenType::SEMICOLON,
+            "Expect ';' after variable declaration.",
+        )?;
+        Ok(Stmt::Var(name, initializer))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
@@ -169,6 +233,10 @@ impl Parser {
             return Ok(Expr::Literal(
                 self.previous().literal.as_ref().unwrap().clone(),
             ));
+        }
+
+        if self.match_type(&[TokenType::IDENTIFIER]) {
+            return Ok(Expr::Var(self.previous().clone()));
         }
 
         if self.match_type(&[TokenType::LEFTPAREN]) {

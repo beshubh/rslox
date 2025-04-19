@@ -1,5 +1,4 @@
 use crate::{
-    ast_printer,
     interpreter::{self, RunTimeError},
     parser::Parser,
     scanner::Scanner,
@@ -16,7 +15,7 @@ pub struct Lox {
 }
 
 impl Lox {
-    pub fn run_file(&self, path: &str) -> anyhow::Result<()> {
+    pub fn run_file(&mut self, path: &str) -> anyhow::Result<()> {
         let contents = std::fs::read_to_string(path)?;
         self.run(contents)?;
         if Lox::had_error() {
@@ -42,7 +41,7 @@ impl Lox {
         Ok(())
     }
 
-    fn run(&self, source: String) -> anyhow::Result<()> {
+    fn run(&mut self, source: String) -> anyhow::Result<()> {
         let mut scanner = Scanner::new(source);
         let tokens = scanner.scan_tokens();
         let mut parser = Parser::new(tokens);
@@ -53,7 +52,6 @@ impl Lox {
         if Self::had_runtime_error() {
             return Err(anyhow::Error::msg("Runtime error"));
         }
-        let statements = statements.unwrap();
         // let printer = ast_printer::AstPrinter {};
         // println!("{}", printer.print(&expr));
         self.interpreter.interpret(statements);
