@@ -56,8 +56,11 @@ impl ExprVisitor<String> for AstPrinter {
     ) -> String {
         return self.parenthesize("?:", &[&cond, &then_expr, &else_expr]);
     }
-
+    // JUST DUMMY IMPLMENTATION
     fn visit_var(&self, _: &Token) -> String {
         return self.parenthesize("var", &[]);
+    }
+    fn visit_assign(&self, _: &Token, expr: &Box<Expr>) -> String {
+        return self.parenthesize("=", &[&expr]);
     }
 }

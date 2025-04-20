@@ -1,4 +1,3 @@
-/*
 /// Grammar for Lox (precdence lowest to highest)
 /// program             -> decleration* EOF;
 /// decleration         -> var_decl | statement ;
@@ -8,14 +7,15 @@
 /// print_statement     -> "print" expression ";";
 /// comma_expression    -> expression ("," expression)*;
 /// ternary             -> expression | expression "?" ternary ":" ternary;// example expr ? true expr : false expr
-/// expression          -> equality;
+/// expression          -> assignment ;
+/// assignment          -> IDENTIFIER "=" assignment | equality ;
 /// equality            -> comparison (( "!=" | "==" )  comparison)* ; // allowing expression like a == b, a != b, a == b != c
 /// comparison          -> term ((">" | ">=" | "<" | "<=") term)* ;
 /// term                ->  factor (("+" | "-") factor)* ;// allow a + b, a - b, a + b / c
 /// factor              ->  unary ( ("/" | "*") unary)* ;
 /// unary               -> ("!", "-") unary | primary ;
 /// primary             -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
-*/
+///
 use crate::ast::Expr;
 use crate::lox::Lox;
 use crate::statement::Stmt;
@@ -132,6 +132,19 @@ impl Parser {
         Ok(Stmt::Expression(Box::new(value)))
     }
 
+    fn assignment(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.equality()?;
+        if self.match_type(&[TokenType::EQUAL]) {
+            let equals = self.previous().clone();
+            let value = self.assignment()?;
+            if let Expr::Var(name) = expr {
+                return Ok(Expr::Assign(name, Box::new(value)));
+            }
+            self.error(&equals, "Invalid assignment target.");
+        }
+        return Ok(expr);
+    }
+
     fn comma_expression(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.expression()?;
         // 1 + 2, 3 - 4, a + b, c + d
@@ -159,7 +172,7 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        self.ternary()
+        self.assignment()
     }
 
     fn equality(&mut self) -> Result<Expr, ParseError> {

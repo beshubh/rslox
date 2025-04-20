@@ -289,6 +289,12 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
     fn visit_var(&self, name: &Token) -> Result<Rc<RefCell<dyn Any>>> {
         return self.environment.get(name.clone());
     }
+
+    fn visit_assign(&self, name: &Token, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
+        let value = self.evaluate(expr)?;
+        self.environment.assign(name.clone(), value.clone())?;
+        return Ok(value);
+    }
 }
 
 impl StmtVisitor<Result<()>> for Interpreter {
@@ -309,7 +315,7 @@ impl StmtVisitor<Result<()>> for Interpreter {
         }
         let initializer = initializer.as_ref().unwrap();
         let value = self.evaluate(&initializer)?;
-        self.environment.define(name.lexeme.clone(), value);
+        self.environment.define(name.clone(), value);
         Ok(())
     }
 }
