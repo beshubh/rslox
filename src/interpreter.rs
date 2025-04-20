@@ -34,15 +34,15 @@ impl std::error::Error for RunTimeError {}
 type Result<T> = std::result::Result<T, RunTimeError>;
 
 pub struct Interpreter {
-    environment: Environment,
+    environment: Rc<Environment>,
 }
 
 impl Interpreter {
-    pub fn new(environment: Environment) -> Self {
+    pub fn new(environment: Rc<Environment>) -> Self {
         Interpreter { environment }
     }
 
-    pub fn interpret(&mut self, statements: Vec<Stmt>) {
+    pub fn interpret(&mut self, statements: &Vec<Stmt>) {
         for stmt in statements {
             let res = self.execute(stmt);
             if let Err(err) = res {
@@ -52,8 +52,22 @@ impl Interpreter {
         }
     }
 
-    fn execute(&mut self, stmt: Stmt) -> Result<()> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<()> {
         return stmt.accept(self);
+    }
+
+    fn execute_block(
+        &mut self,
+        statements: &Vec<Stmt>,
+        environment: Rc<Environment>,
+    ) -> Result<()> {
+        let previous = self.environment.clone();
+        self.environment = environment;
+        for stmt in statements {
+            self.execute(stmt)?;
+        }
+        self.environment = previous;
+        Ok(())
     }
 
     fn evaluate(&self, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
@@ -309,13 +323,19 @@ impl StmtVisitor<Result<()>> for Interpreter {
         Ok(())
     }
 
-    fn visit_var(&mut self, name: &Token, initializer: &Option<Box<Expr>>) -> Result<()> {
+    fn visit_var(&self, name: &Token, initializer: &Option<Box<Expr>>) -> Result<()> {
         if initializer.is_none() {
             return Ok(());
         }
         let initializer = initializer.as_ref().unwrap();
         let value = self.evaluate(&initializer)?;
         self.environment.define(name.clone(), value);
+        Ok(())
+    }
+
+    fn visit_block(&mut self, statements: &Vec<Stmt>) -> Result<()> {
+        let block_env = Rc::new(Environment::new(Some(Rc::clone(&self.environment))));
+        self.execute_block(statements, block_env)?;
         Ok(())
     }
 }

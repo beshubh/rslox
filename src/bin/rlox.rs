@@ -1,5 +1,6 @@
 use clap::Parser;
 use rslox::{environment, lox::Lox};
+use std::rc::Rc;
 
 #[derive(Parser, Debug, Clone)]
 #[command(author = "Shubh")]
@@ -12,7 +13,8 @@ struct Cli {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let interpreter = rslox::interpreter::Interpreter::new(environment::Environment::new());
+    let interpreter =
+        rslox::interpreter::Interpreter::new(Rc::new(environment::Environment::new(None)));
     let mut lox = Lox { interpreter };
     match cli.script {
         Some(script) => lox.run_file(&script),

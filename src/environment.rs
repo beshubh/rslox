@@ -7,16 +7,18 @@ use std::rc::Rc;
 
 pub struct Environment {
     values: RefCell<HashMap<String, Rc<RefCell<dyn Any>>>>,
+    enclosing: Option<Rc<Environment>>,
 }
 
 impl Environment {
-    pub fn new() -> Self {
+    pub fn new(enclosing: Option<Rc<Environment>>) -> Self {
         Environment {
             values: RefCell::new(HashMap::new()),
+            enclosing,
         }
     }
 
-    pub fn define(&mut self, name: Token, value: Rc<RefCell<dyn Any>>) {
+    pub fn define(&self, name: Token, value: Rc<RefCell<dyn Any>>) {
         self.values.borrow_mut().insert(name.lexeme, value);
     }
 
@@ -25,6 +27,9 @@ impl Environment {
         if map.contains_key(&name.lexeme) {
             map.insert(name.lexeme, value);
             return Ok(());
+        }
+        if self.enclosing.is_some() {
+            return self.enclosing.clone().unwrap().assign(name, value);
         }
         Err(RunTimeError::new(
             name.clone(),
@@ -38,10 +43,15 @@ impl Environment {
                 let value = value.clone();
                 return Ok(value);
             }
-            None => Err(RunTimeError::new(
-                name.clone(),
-                &format!("Undefined variable '{}'.", name.lexeme),
-            )),
+            None => {
+                if let Some(enclosing) = &self.enclosing {
+                    return enclosing.clone().get(name);
+                }
+                Err(RunTimeError::new(
+                    name.clone(),
+                    &format!("Undefined variable '{}'.", name.lexeme),
+                ))
+            }
         }
     }
 }

@@ -2,7 +2,8 @@
 /// program             -> decleration* EOF;
 /// decleration         -> var_decl | statement ;
 /// var_decl            -> "var" IDENTIFIER ( "=" expression )? ";" ;
-/// statement           -> expr_statement | print_statement ;
+/// statement           -> expr_statement | print_statement | block ;
+/// block               -> "{" decleration* "}" ;
 /// expr_statement      -> expression ";";
 /// print_statement     -> "print" expression ";";
 /// comma_expression    -> expression ("," expression)*;
@@ -117,6 +118,9 @@ impl Parser {
         if self.match_type(&[TokenType::PRINT]) {
             return self.print_statement();
         }
+        if self.match_type(&[TokenType::LEFTBRACE]) {
+            return Ok(Stmt::Block(self.block()?));
+        }
         return self.expression_statement();
     }
 
@@ -124,6 +128,18 @@ impl Parser {
         let value = self.expression()?;
         self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
         Ok(Stmt::Print(Box::new(value)))
+    }
+
+    fn block(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut statements = vec![];
+        while !self.check(&TokenType::RIGHTBRACE) && !self.is_at_end() {
+            let stmt = self.decleration();
+            if let Some(stmt) = stmt {
+                statements.push(stmt);
+            }
+        }
+        self.consume(&TokenType::RIGHTBRACE, "Expect '}' after block.")?;
+        Ok(statements)
     }
 
     fn expression_statement(&mut self) -> Result<Stmt, ParseError> {

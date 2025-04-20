@@ -54,7 +54,7 @@ impl Lox {
         }
         // let printer = ast_printer::AstPrinter {};
         // println!("{}", printer.print(&expr));
-        self.interpreter.interpret(statements);
+        self.interpreter.interpret(&statements);
         Ok(())
     }
 
