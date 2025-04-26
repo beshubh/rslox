@@ -63,4 +63,8 @@ impl ExprVisitor<String> for AstPrinter {
     fn visit_assign(&self, _: &Token, expr: &Box<Expr>) -> String {
         return self.parenthesize("=", &[&expr]);
     }
+
+    fn visit_logical(&self, left: &Box<Expr>, logical_op: &Token, right: &Box<Expr>) -> String {
+        return self.parenthesize(&logical_op.lexeme, &[&left, &right]);
+    }
 }

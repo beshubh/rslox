@@ -1,22 +1,3 @@
-/// Grammar for Lox (precdence lowest to highest)
-/// program             -> decleration* EOF;
-/// decleration         -> var_decl | statement ;
-/// var_decl            -> "var" IDENTIFIER ( "=" expression )? ";" ;
-/// statement           -> expr_statement | print_statement | block ;
-/// block               -> "{" decleration* "}" ;
-/// expr_statement      -> expression ";";
-/// print_statement     -> "print" expression ";";
-/// comma_expression    -> expression ("," expression)*;
-/// ternary             -> expression | expression "?" ternary ":" ternary;// example expr ? true expr : false expr
-/// expression          -> assignment ;
-/// assignment          -> IDENTIFIER "=" assignment | equality ;
-/// equality            -> comparison (( "!=" | "==" )  comparison)* ; // allowing expression like a == b, a != b, a == b != c
-/// comparison          -> term ((">" | ">=" | "<" | "<=") term)* ;
-/// term                ->  factor (("+" | "-") factor)* ;// allow a + b, a - b, a + b / c
-/// factor              ->  unary ( ("/" | "*") unary)* ;
-/// unary               -> ("!", "-") unary | primary ;
-/// primary             -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
-///
 use crate::ast::Expr;
 use crate::lox::Lox;
 use crate::statement::Stmt;
@@ -115,13 +96,34 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.match_type(&[TokenType::IF]) {
+            return self.if_statement();
+        }
         if self.match_type(&[TokenType::PRINT]) {
             return self.print_statement();
         }
         if self.match_type(&[TokenType::LEFTBRACE]) {
             return Ok(Stmt::Block(self.block()?));
         }
+
         return self.expression_statement();
+    }
+
+    fn if_statement(&mut self) -> Result<Stmt, ParseError> {
+        self.consume(&TokenType::LEFTPAREN, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(&TokenType::RIGHTPAREN, "Expect ')' after if condition.")?;
+
+        let then_branch = self.statement()?;
+        let mut else_branch: Option<Box<Stmt>> = None;
+        if self.match_type(&[TokenType::ELSE]) {
+            else_branch = Some(Box::new(self.statement()?))
+        }
+        Ok(Stmt::If(
+            Box::new(condition),
+            Box::new(then_branch),
+            else_branch,
+        ))
     }
 
     fn print_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -149,7 +151,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<Expr, ParseError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
         if self.match_type(&[TokenType::EQUAL]) {
             let equals = self.previous().clone();
             let value = self.assignment()?;
@@ -159,6 +161,26 @@ impl Parser {
             self.error(&equals, "Invalid assignment target.");
         }
         return Ok(expr);
+    }
+
+    fn or(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.and()?;
+        while self.match_type(&[TokenType::OR]) {
+            let operator = self.previous().clone();
+            let right = self.and()?;
+            expr = Expr::Logical(Box::new(expr), operator, Box::new(right));
+        }
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.equality()?;
+        while self.match_type(&[TokenType::AND]) {
+            let operator = self.previous().clone();
+            let right = self.equality()?;
+            expr = Expr::Logical(Box::new(expr), operator, Box::new(right));
+        }
+        Ok(expr)
     }
 
     fn comma_expression(&mut self) -> Result<Expr, ParseError> {

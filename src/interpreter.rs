@@ -59,10 +59,10 @@ impl Interpreter {
     fn execute_block(
         &mut self,
         statements: &Vec<Stmt>,
-        environment: Rc<Environment>,
+        block_environment: Rc<Environment>,
     ) -> Result<()> {
         let previous = self.environment.clone();
-        self.environment = environment;
+        self.environment = block_environment;
         for stmt in statements {
             self.execute(stmt)?;
         }
@@ -76,9 +76,11 @@ impl Interpreter {
 
     pub fn stringify(&self, obj: Rc<RefCell<dyn Any>>) -> String {
         let obj = obj.borrow();
+
         if obj.is::<Option<()>>() {
             return "nil".to_string();
         }
+
         if obj.is::<f64>() {
             let text = obj.downcast_ref::<f64>().unwrap().to_string();
             if text.ends_with(".0") {
@@ -86,6 +88,7 @@ impl Interpreter {
             }
             return text;
         }
+
         if obj.is::<bool>() {
             return obj.downcast_ref::<bool>().unwrap().to_string();
         }
@@ -155,8 +158,27 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
             Literal::Number(num) => Ok(Rc::new(RefCell::new(*num)) as Rc<RefCell<dyn Any>>),
             Literal::String(s) => Ok(Rc::new(RefCell::new(s.clone())) as Rc<RefCell<dyn Any>>),
             Literal::Boolean(b) => Ok(Rc::new(RefCell::new(*b)) as Rc<RefCell<dyn Any>>),
-            Literal::Nil => Ok(Rc::new(RefCell::new(())) as Rc<RefCell<dyn Any>>),
+            Literal::Nil => Ok(Rc::new(RefCell::new(Option::<()>::None)) as Rc<RefCell<dyn Any>>),
         }
+    }
+
+    fn visit_logical(
+        &self,
+        left: &Box<Expr>,
+        logical_op: &Token,
+        right: &Box<Expr>,
+    ) -> Result<Rc<RefCell<dyn Any>>> {
+        let left = self.evaluate(left)?;
+        if logical_op.token_type == TokenType::OR {
+            if self.is_truthy(left.clone()) {
+                return Ok(left);
+            }
+        } else {
+            if !self.is_truthy(left.clone()) {
+                return Ok(left);
+            }
+        }
+        return self.evaluate(right);
     }
 
     fn visit_grouping(&self, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
@@ -336,6 +358,21 @@ impl StmtVisitor<Result<()>> for Interpreter {
     fn visit_block(&mut self, statements: &Vec<Stmt>) -> Result<()> {
         let block_env = Rc::new(Environment::new(Some(Rc::clone(&self.environment))));
         self.execute_block(statements, block_env)?;
+        Ok(())
+    }
+
+    fn visit_if(
+        &mut self,
+        condition: &Box<Expr>,
+        then_branch: &Box<Stmt>,
+        else_branch: &Option<Box<Stmt>>,
+    ) -> Result<()> {
+        let cond = self.evaluate(condition)?;
+        if self.is_truthy(cond) {
+            self.execute(&then_branch)?;
+        } else if else_branch.is_some() {
+            self.execute(else_branch.as_ref().unwrap())?;
+        }
         Ok(())
     }
 }
