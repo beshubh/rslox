@@ -4,7 +4,9 @@ Grammar for Lox (precdence lowest to highest)
 program             -> decleration* EOF;
 decleration         -> var_decl | statement ;
 var_decl            -> "var" IDENTIFIER ( "=" expression )? ";" ;
-statement           -> expr_statement | print_statement | block | if_statement ;
+statement           -> expr_statement | for_statement | if_statement| print_statement | while_statement | block  ;
+while_statement     -> "while" "(" expression ")" statement ;
+for_statement       -> "for" "(" (var_decl | expr_statement | ";" ) expression? ";" expression? ")" statement;
 block               -> "{" decleration* "}" ;
 if_statement        -> "if" "(" expression ")" statement ("else" statement)?;
 expr_statement      -> expression ";";

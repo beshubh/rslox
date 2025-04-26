@@ -18,11 +18,6 @@ impl Expr {
         match self {
             Expr::Assign(name, expr) => return vistor.visit_assign(name, expr),
             Expr::Binary(left, op, right) => {
-                // HACK: Logical operators are also binary operators and rust's match will always use the first match
-                // So we need to check if the operator is logical and use the logical visitor
-                if op.token_type == TokenType::OR || op.token_type == TokenType::AND {
-                    return vistor.visit_logical(left, op, right);
-                }
                 return vistor.visit_binary(left, op, right);
             }
             Expr::Literal(literal) => return vistor.visit_literal(literal),

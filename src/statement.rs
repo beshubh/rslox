@@ -6,6 +6,7 @@ pub enum Stmt {
     If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
     Print(Box<Expr>),
     Var(Token, Option<Box<Expr>>),
+    While(Box<Expr>, Box<Stmt>),
 }
 
 pub trait StmtVisitor<R> {
@@ -17,6 +18,7 @@ pub trait StmtVisitor<R> {
         then_branch: &Box<Stmt>,
         else_branch: &Option<Box<Stmt>>,
     ) -> R;
+    fn visit_while(&mut self, condition: &Box<Expr>, body: &Box<Stmt>) -> R;
     fn visit_print(&self, expr: &Box<Expr>) -> R;
     fn visit_var(&self, name: &Token, initializer: &Option<Box<Expr>>) -> R;
 }
@@ -31,6 +33,7 @@ impl Stmt {
             }
             Stmt::Print(expr) => visitor.visit_print(expr),
             Stmt::Var(name, initializer) => visitor.visit_var(name, initializer),
+            Stmt::While(condition, body) => visitor.visit_while(condition, body),
         }
     }
 }

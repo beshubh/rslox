@@ -2,7 +2,7 @@ use crate::ast::Expr;
 use crate::lox::Lox;
 use crate::statement::Stmt;
 use crate::token::{self, Token, TokenType};
-use std::fmt;
+use std::{fmt, vec};
 
 pub struct Parser {
     pub tokens: Vec<Token>,
@@ -96,11 +96,18 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.match_type(&[TokenType::FOR]) {
+            return self.for_statement();
+        }
         if self.match_type(&[TokenType::IF]) {
             return self.if_statement();
         }
         if self.match_type(&[TokenType::PRINT]) {
             return self.print_statement();
+        }
+
+        if self.match_type(&[TokenType::WHILE]) {
+            return self.while_statement();
         }
         if self.match_type(&[TokenType::LEFTBRACE]) {
             return Ok(Stmt::Block(self.block()?));
@@ -109,10 +116,55 @@ impl Parser {
         return self.expression_statement();
     }
 
+    fn for_statement(&mut self) -> Result<Stmt, ParseError> {
+        // de-sugaring for loop to the while loop;
+
+        self.consume(&TokenType::LEFTPAREN, "Expect '(' after for.")?;
+        let initializer;
+
+        if self.match_type(&[TokenType::SEMICOLON]) {
+            initializer = None;
+        } else if self.match_type(&[TokenType::VAR]) {
+            initializer = Some(self.var_decl()?);
+        } else {
+            initializer = Some(self.expression_statement()?);
+        }
+        let mut condition = None;
+        if !self.check(&TokenType::SEMICOLON) {
+            condition = Some(self.expression()?);
+        }
+        self.consume(&TokenType::SEMICOLON, "Expect ';' after condition.")?;
+        let mut increment = None;
+        if !self.check(&TokenType::RIGHTPAREN) {
+            increment = Some(self.expression()?);
+        }
+
+        self.consume(&TokenType::RIGHTPAREN, "Expect ')' after for clauses.")?;
+
+        let mut body = self.statement()?;
+        // make a block with body of for loop and increment expression in the end.
+        if increment.is_some() {
+            body = Stmt::Block(vec![body, Stmt::Expression(Box::new(increment.unwrap()))]);
+        }
+
+        // if condiiton is not provided means its infinite loop.
+        if condition.is_none() {
+            condition = Some(Expr::Literal(token::Literal::Boolean(true)));
+        }
+        // de-sugar the for into while using the body of for and condition of for in the while.
+        body = Stmt::While(Box::new(condition.unwrap()), Box::new(body));
+
+        // if there is initializer we make a block again that runs the initializer first and then the while loop.
+        if initializer.is_some() {
+            body = Stmt::Block(vec![initializer.unwrap(), body]);
+        }
+        Ok(body)
+    }
+
     fn if_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume(&TokenType::LEFTPAREN, "Expect '(' after 'if'.")?;
         let condition = self.expression()?;
-        self.consume(&TokenType::RIGHTPAREN, "Expect ')' after if condition.")?;
+        self.consume(&TokenType::RIGHTPAREN, "Expect ')' after condition.")?;
 
         let then_branch = self.statement()?;
         let mut else_branch: Option<Box<Stmt>> = None;
@@ -130,6 +182,14 @@ impl Parser {
         let value = self.expression()?;
         self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
         Ok(Stmt::Print(Box::new(value)))
+    }
+
+    fn while_statement(&mut self) -> Result<Stmt, ParseError> {
+        self.consume(&TokenType::LEFTPAREN, "Expect '(' after 'while'.")?;
+        let condition = self.expression()?;
+        self.consume(&TokenType::RIGHTPAREN, "Expect ')' after condition.")?;
+        let body = self.statement()?;
+        Ok(Stmt::While(Box::new(condition), Box::new(body)))
     }
 
     fn block(&mut self) -> Result<Vec<Stmt>, ParseError> {

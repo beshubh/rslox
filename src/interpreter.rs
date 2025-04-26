@@ -347,6 +347,8 @@ impl StmtVisitor<Result<()>> for Interpreter {
 
     fn visit_var(&self, name: &Token, initializer: &Option<Box<Expr>>) -> Result<()> {
         if initializer.is_none() {
+            self.environment
+                .define(name.clone(), Rc::new(RefCell::new(Option::<()>::None)));
             return Ok(());
         }
         let initializer = initializer.as_ref().unwrap();
@@ -372,6 +374,13 @@ impl StmtVisitor<Result<()>> for Interpreter {
             self.execute(&then_branch)?;
         } else if else_branch.is_some() {
             self.execute(else_branch.as_ref().unwrap())?;
+        }
+        Ok(())
+    }
+
+    fn visit_while(&mut self, condition: &Box<Expr>, body: &Box<Stmt>) -> Result<()> {
+        while self.is_truthy(self.evaluate(condition)?) {
+            self.execute(body)?;
         }
         Ok(())
     }
