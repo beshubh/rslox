@@ -1,9 +1,37 @@
-
 fun fib(n) {
+  print n;
   if (n <= 1) return n;
-  return fib(n - 2) + fib(n - 1/0);
+  var n1 = fib(n - 2);
+  print "after n - 2, n: " + n;
+  var n2  = fib(n - 2);
+
+  return n1 + n2;
 }
 
 for (var i = 0; i < 20; i = i + 1) {
-  print fib(i);
+  print "fib " + i + " " + fib(i);
 }
+
+/**
+{
+
+var a = 10;
+var b = 20;
+var c = 50;
+ {
+   a = 30;
+   print a + " " + b;
+    {
+    a = 1999;
+    var b = 69;
+    print a + " " + b + " " + c;
+    }
+    print a;
+    print b;
+    print c;
+ }
+ print a;
+ print b;
+ print c;
+}
+*/

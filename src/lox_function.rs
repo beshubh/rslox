@@ -37,12 +37,16 @@ impl LoxCallable for LoxFuntion {
         }
         let res = interpreter.execute_block(&self.body, Rc::new(environment));
         // BUG: there is a bug in handling return values, i don't know if its in this code or in interpreter but there is a bug
+        // after bit of run through, the bug is in lexical scoping & variable modification, in recursion, the original parameter
+        // passed to the function itself gets modified after recursive call finishes.
         if let Err(e) = res {
             match e {
                 InterpreterError::Return(val) => {
                     if let Some(v) = val.value {
+                        eprintln!("DEBUG: return some {:?}", v);
                         return Ok(v);
                     } else {
+                        eprintln!("DEBUG: return none");
                         return Ok(
                             Rc::new(RefCell::new(Option::<()>::None)) as Rc<RefCell<dyn Any>>
                         );

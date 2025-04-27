@@ -78,6 +78,7 @@ impl Interpreter {
         let environment = RefCell::new(environment.clone());
 
         struct NativeClockFunction;
+        // BUG: this causes panic when done print clock; or print clock();
         impl LoxCallable for NativeClockFunction {
             fn arity(&self) -> usize {
                 return 0;
@@ -169,7 +170,6 @@ impl Interpreter {
             }
             return text;
         }
-
         if obj.is::<bool>() {
             return obj.downcast_ref::<bool>().unwrap().to_string();
         }
