@@ -93,7 +93,7 @@ impl Interpreter {
     }
 
     pub fn execute(&self, stmt: &Stmt) -> Result<()> {
-        return stmt.accept(self);
+        stmt.accept(self)
     }
 
     pub fn execute_block(
@@ -112,7 +112,7 @@ impl Interpreter {
     }
 
     fn evaluate(&self, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
-        return expr.accept(self);
+        expr.accept(self)
     }
 
     pub fn stringify(&self, obj: Rc<RefCell<dyn Any>>) -> String {
@@ -133,7 +133,7 @@ impl Interpreter {
         if obj.is::<bool>() {
             return obj.downcast_ref::<bool>().unwrap().to_string();
         }
-        return obj.downcast_ref::<String>().unwrap().to_string();
+        obj.downcast_ref::<String>().unwrap().to_string()
     }
 
     fn is_truthy(&self, obj: Rc<RefCell<dyn Any>>) -> bool {
@@ -145,7 +145,7 @@ impl Interpreter {
         if obj.is::<bool>() {
             return *obj.downcast_ref::<bool>().unwrap();
         }
-        return true;
+        true
     }
 
     fn is_equal(&self, a: Rc<RefCell<dyn Any>>, b: Rc<RefCell<dyn Any>>) -> bool {
@@ -167,7 +167,7 @@ impl Interpreter {
         if a.is::<bool>() && b.is::<bool>() {
             return a.downcast_ref::<bool>() == b.downcast_ref::<bool>();
         }
-        return false;
+        false
     }
 
     fn check_number_operand(&self, op: &Token, operand: &Rc<RefCell<dyn Any>>) -> Result<()> {
@@ -219,7 +219,7 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
                 return Ok(left);
             }
         }
-        return self.evaluate(right);
+        self.evaluate(right)
     }
 
     fn visit_grouping(&self, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
@@ -360,20 +360,11 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
         if self.is_truthy(cond) {
             return self.evaluate(then_expr);
         }
-        return self.evaluate(else_expr);
+        self.evaluate(else_expr)
     }
 
     fn visit_var(&self, name: &Token) -> Result<Rc<RefCell<dyn Any>>> {
-        println!("var vist: {:?}", name);
-        println!(
-            "stored at name: {:?}",
-            self.environment
-                .borrow()
-                .get(name.clone())
-                .unwrap()
-                .type_id()
-        );
-        return self.environment.borrow().get(name.clone());
+        self.environment.borrow().get(name.clone())
     }
 
     fn visit_assign(&self, name: &Token, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
@@ -381,7 +372,7 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
         self.environment
             .borrow()
             .assign(name.clone(), value.clone())?;
-        return Ok(value);
+        Ok(value)
     }
 
     fn visit_call(
@@ -390,9 +381,7 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
         paren: &Token,
         arguments_expr: &Vec<Expr>,
     ) -> Result<Rc<RefCell<dyn Any>>> {
-        println!("before evaluating callee");
         let callee = self.evaluate(callee)?;
-        println!("after evaluating callee");
         let mut arguments = vec![];
         for argument in arguments_expr {
             let boxed_arg = Box::new(argument.clone());
@@ -416,7 +405,7 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
                 ),
             ));
         }
-        return func.call(&self, arguments);
+        func.call(&self, arguments)
     }
 }
 
@@ -485,10 +474,12 @@ impl StmtVisitor<Result<()>> for Interpreter {
         body: &Vec<Stmt>,
     ) -> Result<()> {
         let function = LoxFuntion::new(name.clone(), parameters.clone(), body.clone());
-        self.environment.borrow_mut().define(
-            name.lexeme.clone(),
-            Rc::new(RefCell::new(Box::new(function))) as Rc<RefCell<dyn Any>>,
-        );
+        let val = Rc::new(RefCell::new(Box::new(function) as Box<dyn LoxCallable>))
+            as Rc<RefCell<dyn Any>>;
+
+        self.environment
+            .borrow_mut()
+            .define(name.lexeme.clone(), val);
         Ok(())
     }
 }
