@@ -1,3 +1,4 @@
+use crate::interpreter::Result;
 use crate::interpreter::RunTimeError;
 use crate::token::Token;
 use std::any::Any;
@@ -22,7 +23,7 @@ impl Environment {
         self.values.borrow_mut().insert(name, value);
     }
 
-    pub fn assign(&self, name: Token, value: Rc<RefCell<dyn Any>>) -> Result<(), RunTimeError> {
+    pub fn assign(&self, name: Token, value: Rc<RefCell<dyn Any>>) -> Result<()> {
         let mut map = self.values.borrow_mut();
         if map.contains_key(&name.lexeme) {
             map.insert(name.lexeme, value);
@@ -34,10 +35,11 @@ impl Environment {
         Err(RunTimeError::new(
             name.clone(),
             &format!("Undefined variable '{}'.", name.lexeme),
-        ))
+        )
+        .into())
     }
 
-    pub fn get(&self, name: Token) -> Result<Rc<RefCell<dyn Any>>, RunTimeError> {
+    pub fn get(&self, name: Token) -> Result<Rc<RefCell<dyn Any>>> {
         match self.values.borrow().get(&name.lexeme) {
             Some(value) => {
                 let value = value.clone();
@@ -50,7 +52,8 @@ impl Environment {
                 Err(RunTimeError::new(
                     name.clone(),
                     &format!("Undefined variable '{}'.", name.lexeme),
-                ))
+                )
+                .into())
             }
         }
     }

@@ -1,5 +1,6 @@
 use crate::environment::Environment;
 use crate::interpreter::Interpreter;
+use crate::interpreter::InterpreterError;
 use crate::interpreter::Result;
 use crate::token::Token;
 use crate::{lox_callable::LoxCallable, statement::Stmt};
@@ -34,7 +35,24 @@ impl LoxCallable for LoxFuntion {
         for (i, param) in self.params.iter().enumerate() {
             environment.define(param.lexeme.clone(), arguments.get(i).unwrap().clone());
         }
-        interpreter.execute_block(&self.body, Rc::new(environment))?;
+        let res = interpreter.execute_block(&self.body, Rc::new(environment));
+        // BUG: there is a bug in handling return values, i don't know if its in this code or in interpreter but there is a bug
+        if let Err(e) = res {
+            match e {
+                InterpreterError::Return(val) => {
+                    if let Some(v) = val.value {
+                        return Ok(v);
+                    } else {
+                        return Ok(
+                            Rc::new(RefCell::new(Option::<()>::None)) as Rc<RefCell<dyn Any>>
+                        );
+                    }
+                }
+                _ => {
+                    return Err(e);
+                }
+            }
+        }
         Ok(Rc::new(RefCell::new(Option::<()>::None)) as Rc<RefCell<dyn Any>>)
     }
 }

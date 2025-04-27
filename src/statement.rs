@@ -9,6 +9,7 @@ pub enum Stmt {
     Print(Box<Expr>),
     Var(Token, Option<Box<Expr>>),
     While(Box<Expr>, Box<Stmt>),
+    Return(Token, Option<Box<Expr>>),
 }
 
 pub trait StmtVisitor<R> {
@@ -24,6 +25,7 @@ pub trait StmtVisitor<R> {
     fn visit_while(&self, condition: &Box<Expr>, body: &Box<Stmt>) -> R;
     fn visit_print(&self, expr: &Box<Expr>) -> R;
     fn visit_var(&self, name: &Token, initializer: &Option<Box<Expr>>) -> R;
+    fn visit_return(&self, keyword: &Token, value: &Option<Box<Expr>>) -> R;
 }
 
 impl Stmt {
@@ -40,6 +42,7 @@ impl Stmt {
             Stmt::Print(expr) => visitor.visit_print(expr),
             Stmt::Var(name, initializer) => visitor.visit_var(name, initializer),
             Stmt::While(condition, body) => visitor.visit_while(condition, body),
+            Stmt::Return(keyword, value) => visitor.visit_return(keyword, value),
         }
     }
 }

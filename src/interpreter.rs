@@ -31,9 +31,41 @@ impl RunTimeError {
     }
 }
 
+#[derive(Debug)]
+pub struct Return {
+    pub value: Option<Rc<RefCell<dyn Any>>>,
+}
+
+impl fmt::Display for Return {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // NOTE: we won't actually use this ever
+        write!(f, " Return statement.")
+    }
+}
+
+impl std::error::Error for Return {}
+
 impl std::error::Error for RunTimeError {}
 
-pub type Result<T> = std::result::Result<T, RunTimeError>;
+#[derive(Debug)]
+pub enum InterpreterError {
+    Runtime(RunTimeError),
+    Return(Return),
+}
+
+impl From<RunTimeError> for InterpreterError {
+    fn from(err: RunTimeError) -> Self {
+        InterpreterError::Runtime(err)
+    }
+}
+
+impl From<Return> for InterpreterError {
+    fn from(ret: Return) -> Self {
+        InterpreterError::Return(ret)
+    }
+}
+
+pub type Result<T> = std::result::Result<T, InterpreterError>;
 
 pub struct Interpreter {
     pub globals: Rc<Environment>,
@@ -86,7 +118,15 @@ impl Interpreter {
         for stmt in statements {
             let res = self.execute(stmt);
             if let Err(err) = res {
-                Lox::runtime_error(err);
+                match err {
+                    InterpreterError::Runtime(err) => {
+                        Lox::runtime_error(err);
+                    }
+                    // this will never happen
+                    _ => {
+                        eprintln!("Uknown error occurred: {:?}", err)
+                    }
+                }
                 return;
             }
         }
@@ -173,7 +213,7 @@ impl Interpreter {
     fn check_number_operand(&self, op: &Token, operand: &Rc<RefCell<dyn Any>>) -> Result<()> {
         let operand = operand.borrow();
         if !operand.is::<f64>() {
-            return Err(RunTimeError::new(op.clone(), "Operand must be a number."));
+            return Err(RunTimeError::new(op.clone(), "Operand must be a number.").into());
         }
         Ok(())
     }
@@ -187,7 +227,7 @@ impl Interpreter {
         let left = left.borrow();
         let right = right.borrow();
         if !left.is::<f64>() || !right.is::<f64>() {
-            return Err(RunTimeError::new(op.clone(), "Operands must be numbers"));
+            return Err(RunTimeError::new(op.clone(), "Operands must be numbers").into());
         }
         Ok(())
     }
@@ -236,7 +276,7 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
                     -self.evaluate(expr)?.borrow().downcast_ref::<f64>().unwrap(),
                 )));
             }
-            _ => Err(RunTimeError::new(op.clone(), "Unknown unary operator")),
+            _ => Err(RunTimeError::new(op.clone(), "Unknown unary operator").into()),
         }
     }
 
@@ -325,15 +365,15 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
                 return Err(RunTimeError::new(
                     op.clone(),
                     "Operands not compatible for addition/concatenation",
-                ));
+                )
+                .into());
             }
             TokenType::SLASH => {
                 self.check_number_operand_s(op, &left, &right)?;
                 if right.borrow().downcast_ref::<f64>().unwrap() == &0.0 {
-                    return Err(RunTimeError::new(
-                        op.clone(),
-                        "Division by zero is not allowed.",
-                    ));
+                    return Err(
+                        RunTimeError::new(op.clone(), "Division by zero is not allowed.").into(),
+                    );
                 }
                 return Ok(Rc::new(RefCell::new(
                     left.borrow().downcast_ref::<f64>().unwrap()
@@ -389,10 +429,9 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
         }
         let callee = callee.borrow();
         if !callee.is::<Box<dyn LoxCallable>>() {
-            return Err(RunTimeError::new(
-                paren.clone(),
-                "Can only call functions and classes.",
-            ));
+            return Err(
+                RunTimeError::new(paren.clone(), "Can only call functions and classes.").into(),
+            );
         }
         let func = callee.downcast_ref::<Box<dyn LoxCallable>>().unwrap();
         if arguments.len() != func.arity() {
@@ -403,7 +442,8 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
                     func.arity(),
                     arguments.len()
                 ),
-            ));
+            )
+            .into());
         }
         func.call(&self, arguments)
     }
@@ -481,5 +521,13 @@ impl StmtVisitor<Result<()>> for Interpreter {
             .borrow_mut()
             .define(name.lexeme.clone(), val);
         Ok(())
+    }
+
+    fn visit_return(&self, _keyword: &Token, value_expr: &Option<Box<Expr>>) -> Result<()> {
+        let mut value = None;
+        if let Some(v) = value_expr {
+            value = Some(self.evaluate(v)?);
+        }
+        Err(Return { value }.into())
     }
 }
