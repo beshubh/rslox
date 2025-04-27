@@ -18,8 +18,8 @@ impl Environment {
         }
     }
 
-    pub fn define(&self, name: Token, value: Rc<RefCell<dyn Any>>) {
-        self.values.borrow_mut().insert(name.lexeme, value);
+    pub fn define(&self, name: String, value: Rc<RefCell<dyn Any>>) {
+        self.values.borrow_mut().insert(name, value);
     }
 
     pub fn assign(&self, name: Token, value: Rc<RefCell<dyn Any>>) -> Result<(), RunTimeError> {

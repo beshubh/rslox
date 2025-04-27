@@ -1,6 +1,8 @@
 use crate::ast::{Expr, ExprVisitor};
 use crate::environment::Environment;
 use crate::lox::Lox;
+use crate::lox_callable::LoxCallable;
+use crate::lox_function::LoxFuntion;
 use crate::statement::{Stmt, StmtVisitor};
 use crate::token::{Literal, Token, TokenType};
 use std::any::Any;
@@ -31,18 +33,56 @@ impl RunTimeError {
 
 impl std::error::Error for RunTimeError {}
 
-type Result<T> = std::result::Result<T, RunTimeError>;
+pub type Result<T> = std::result::Result<T, RunTimeError>;
 
 pub struct Interpreter {
-    environment: Rc<Environment>,
+    pub globals: Rc<Environment>,
+    pub environment: RefCell<Rc<Environment>>,
 }
 
 impl Interpreter {
     pub fn new(environment: Rc<Environment>) -> Self {
-        Interpreter { environment }
+        let globals = environment.clone();
+        let environment = RefCell::new(environment.clone());
+
+        struct NativeClockFunction;
+        impl LoxCallable for NativeClockFunction {
+            fn arity(&self) -> usize {
+                return 0;
+            }
+
+            fn call(
+                &self,
+                _interpreter: &Interpreter,
+                _arguments: Vec<Rc<RefCell<dyn Any>>>,
+            ) -> Result<Rc<RefCell<dyn Any>>> {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis();
+
+                return Ok(Rc::new(RefCell::new(now)) as Rc<RefCell<dyn Any>>);
+            }
+        }
+        impl fmt::Display for NativeClockFunction {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "<native_fn>")
+            }
+        }
+
+        globals.define(
+            "clock".to_string(),
+            Rc::new(RefCell::new(
+                Box::new(NativeClockFunction) as Box<dyn LoxCallable>
+            )) as Rc<RefCell<dyn Any>>,
+        );
+        Interpreter {
+            globals,
+            environment,
+        }
     }
 
-    pub fn interpret(&mut self, statements: &Vec<Stmt>) {
+    pub fn interpret(&self, statements: &Vec<Stmt>) {
         for stmt in statements {
             let res = self.execute(stmt);
             if let Err(err) = res {
@@ -52,21 +92,22 @@ impl Interpreter {
         }
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<()> {
+    pub fn execute(&self, stmt: &Stmt) -> Result<()> {
         return stmt.accept(self);
     }
 
-    fn execute_block(
-        &mut self,
+    pub fn execute_block(
+        &self,
         statements: &Vec<Stmt>,
         block_environment: Rc<Environment>,
     ) -> Result<()> {
-        let previous = self.environment.clone();
-        self.environment = block_environment;
+        let previous = self.environment.borrow().clone();
+        self.environment.replace(block_environment);
+
         for stmt in statements {
             self.execute(stmt)?;
         }
-        self.environment = previous;
+        self.environment.replace(previous);
         Ok(())
     }
 
@@ -323,13 +364,59 @@ impl ExprVisitor<Result<Rc<RefCell<dyn Any>>>> for Interpreter {
     }
 
     fn visit_var(&self, name: &Token) -> Result<Rc<RefCell<dyn Any>>> {
-        return self.environment.get(name.clone());
+        println!("var vist: {:?}", name);
+        println!(
+            "stored at name: {:?}",
+            self.environment
+                .borrow()
+                .get(name.clone())
+                .unwrap()
+                .type_id()
+        );
+        return self.environment.borrow().get(name.clone());
     }
 
     fn visit_assign(&self, name: &Token, expr: &Box<Expr>) -> Result<Rc<RefCell<dyn Any>>> {
         let value = self.evaluate(expr)?;
-        self.environment.assign(name.clone(), value.clone())?;
+        self.environment
+            .borrow()
+            .assign(name.clone(), value.clone())?;
         return Ok(value);
+    }
+
+    fn visit_call(
+        &self,
+        callee: &Box<Expr>,
+        paren: &Token,
+        arguments_expr: &Vec<Expr>,
+    ) -> Result<Rc<RefCell<dyn Any>>> {
+        println!("before evaluating callee");
+        let callee = self.evaluate(callee)?;
+        println!("after evaluating callee");
+        let mut arguments = vec![];
+        for argument in arguments_expr {
+            let boxed_arg = Box::new(argument.clone());
+            arguments.push(self.evaluate(&boxed_arg)?);
+        }
+        let callee = callee.borrow();
+        if !callee.is::<Box<dyn LoxCallable>>() {
+            return Err(RunTimeError::new(
+                paren.clone(),
+                "Can only call functions and classes.",
+            ));
+        }
+        let func = callee.downcast_ref::<Box<dyn LoxCallable>>().unwrap();
+        if arguments.len() != func.arity() {
+            return Err(RunTimeError::new(
+                paren.clone(),
+                &format!(
+                    "Expected {} arguments but got {}.",
+                    func.arity(),
+                    arguments.len()
+                ),
+            ));
+        }
+        return func.call(&self, arguments);
     }
 }
 
@@ -347,24 +434,30 @@ impl StmtVisitor<Result<()>> for Interpreter {
 
     fn visit_var(&self, name: &Token, initializer: &Option<Box<Expr>>) -> Result<()> {
         if initializer.is_none() {
-            self.environment
-                .define(name.clone(), Rc::new(RefCell::new(Option::<()>::None)));
+            self.environment.borrow_mut().define(
+                name.lexeme.clone(),
+                Rc::new(RefCell::new(Option::<()>::None)),
+            );
             return Ok(());
         }
         let initializer = initializer.as_ref().unwrap();
         let value = self.evaluate(&initializer)?;
-        self.environment.define(name.clone(), value);
+        self.environment
+            .borrow_mut()
+            .define(name.lexeme.clone(), value);
         Ok(())
     }
 
-    fn visit_block(&mut self, statements: &Vec<Stmt>) -> Result<()> {
-        let block_env = Rc::new(Environment::new(Some(Rc::clone(&self.environment))));
+    fn visit_block(&self, statements: &Vec<Stmt>) -> Result<()> {
+        let block_env = Rc::new(Environment::new(Some(Rc::clone(
+            &self.environment.borrow(),
+        ))));
         self.execute_block(statements, block_env)?;
         Ok(())
     }
 
     fn visit_if(
-        &mut self,
+        &self,
         condition: &Box<Expr>,
         then_branch: &Box<Stmt>,
         else_branch: &Option<Box<Stmt>>,
@@ -378,10 +471,24 @@ impl StmtVisitor<Result<()>> for Interpreter {
         Ok(())
     }
 
-    fn visit_while(&mut self, condition: &Box<Expr>, body: &Box<Stmt>) -> Result<()> {
+    fn visit_while(&self, condition: &Box<Expr>, body: &Box<Stmt>) -> Result<()> {
         while self.is_truthy(self.evaluate(condition)?) {
             self.execute(body)?;
         }
+        Ok(())
+    }
+
+    fn visit_function(
+        &self,
+        name: &Token,
+        parameters: &Vec<Token>,
+        body: &Vec<Stmt>,
+    ) -> Result<()> {
+        let function = LoxFuntion::new(name.clone(), parameters.clone(), body.clone());
+        self.environment.borrow_mut().define(
+            name.lexeme.clone(),
+            Rc::new(RefCell::new(Box::new(function))) as Rc<RefCell<dyn Any>>,
+        );
         Ok(())
     }
 }

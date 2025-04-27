@@ -1,0 +1,46 @@
+use crate::environment::Environment;
+use crate::interpreter::Interpreter;
+use crate::interpreter::Result;
+use crate::token::Token;
+use crate::{lox_callable::LoxCallable, statement::Stmt};
+use core::fmt;
+use std::any::Any;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub struct LoxFuntion {
+    name: Token,
+    params: Vec<Token>,
+    body: Vec<Stmt>,
+}
+
+impl LoxFuntion {
+    pub fn new(name: Token, params: Vec<Token>, body: Vec<Stmt>) -> Self {
+        LoxFuntion { name, params, body }
+    }
+}
+
+impl LoxCallable for LoxFuntion {
+    fn arity(&self) -> usize {
+        self.params.len()
+    }
+
+    fn call(
+        &self,
+        interpreter: &Interpreter,
+        arguments: Vec<Rc<RefCell<dyn Any>>>,
+    ) -> Result<Rc<RefCell<dyn Any>>> {
+        let environment = Environment::new(Some(interpreter.globals.clone()));
+        for (i, param) in self.params.iter().enumerate() {
+            environment.define(param.lexeme.clone(), arguments.get(i).unwrap().clone());
+        }
+        interpreter.execute_block(&self.body, Rc::new(environment))?;
+        Ok(Rc::new(RefCell::new(Option::<()>::None)) as Rc<RefCell<dyn Any>>)
+    }
+}
+
+impl fmt::Display for LoxFuntion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<fn {} >", self.name.lexeme)
+    }
+}

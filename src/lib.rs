@@ -1,9 +1,11 @@
 pub mod ast;
 pub mod ast_printer;
+pub mod environment;
 pub mod interpreter;
 pub mod lox;
+pub mod lox_callable;
+pub mod lox_function;
 pub mod parser;
 pub mod scanner;
 pub mod statement;
 pub mod token;
-pub mod environment;
